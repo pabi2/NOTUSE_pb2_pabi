@@ -33,6 +33,15 @@
         'pabi_stock_card_for_accounting/report_data.xml',
         'pabi_stock_card_for_accounting/wizard/'
         'pabi_stock_card_for_accounting_report_wizard.xml',
+        'pabi_fixed_asset_non_standard_report/report_data.xml',
+        'pabi_fixed_asset_non_standard_report/wizard/'
+        'pabi_fixed_asset_non_standard_report_wizard.xml',
+        'pabi_purchase_green_product_report/report_data.xml',
+        'pabi_purchase_green_product_report/wizard/'
+        'pabi_purchase_green_product_report_wizard.xml',
+        'pabi_purchase_employment_report/report_data.xml',
+        'pabi_purchase_employment_report/wizard/'
+        'pabi_purchase_employment_report_wizard.xml',
         # 'pabi_yearly_purchase/report_data.xml',
         # 'pabi_yearly_purchase/wizard/pabi_yearly_purchase_report_wizard.xml',
     ],
