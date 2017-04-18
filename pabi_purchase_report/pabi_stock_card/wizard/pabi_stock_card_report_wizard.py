@@ -19,10 +19,12 @@ class PabiStockCardReportWizard(models.TransientModel):
         string='Category',
     )
     date_from = fields.Date(
-        string='Contract Start Date',
+        string='From Date',
+        required=True,
     )
     date_to = fields.Date(
-        string='Contract End Date',
+        string='To Date',
+        required=True,
     )
 
     format = fields.Selection(

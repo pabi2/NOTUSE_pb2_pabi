@@ -42,8 +42,8 @@
         'pabi_purchase_employment_report/report_data.xml',
         'pabi_purchase_employment_report/wizard/'
         'pabi_purchase_employment_report_wizard.xml',
-        # 'pabi_yearly_purchase/report_data.xml',
-        # 'pabi_yearly_purchase/wizard/pabi_yearly_purchase_report_wizard.xml',
+        'pabi_yearly_purchase/report_data.xml',
+        'pabi_yearly_purchase/wizard/pabi_yearly_purchase_report_wizard.xml',
     ],
     'demo': [
     ],

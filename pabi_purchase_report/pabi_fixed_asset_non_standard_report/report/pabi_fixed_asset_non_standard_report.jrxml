@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="purchase_summarize_report" language="groovy" pageWidth="1417" pageHeight="595" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="1377" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="pabi_fixed_asset_non_standard_report" language="groovy" pageWidth="1417" pageHeight="595" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="1377" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
 	<property name="ireport.zoom" value="0.9090909090909131"/>
 	<property name="ireport.x" value="0"/>
 	<property name="ireport.y" value="0"/>
@@ -111,24 +111,35 @@ warranty,
 note,
 description
 FROM pabi_fixed_asset_non_standard_report
-WHERE date_order BETWEEN '$P!{date_from}' AND '$P!{date_to}']]>
+WHERE
+case when $P{date_from} != 'Null'
+then date($P{date_from}) < (date_order + '7 hours'::interval)
+else date_order is not null
+end
+and
+case when $P{date_to} != 'Null'
+then (date_order + '7 hours'::interval) < date($P{date_to})
+else date_order is not null
+end]]>
 	</queryString>
-	<field name="po_id" class="java.lang.String"/>
-	<field name="pd_number" class="java.lang.String"/>
-	<field name="objective" class="java.lang.String"/>
-	<field name="qty" class="java.lang.Long">
-		<fieldDescription><![CDATA[Quantity]]></fieldDescription>
+	<field name="product_name" class="java.lang.String"/>
+	<field name="po_name" class="java.lang.String"/>
+	<field name="pol_price" class="java.math.BigDecimal"/>
+	<field name="pr_price" class="java.lang.Double"/>
+	<field name="date_order" class="java.sql.Timestamp">
+		<fieldDescription><![CDATA[First Installment Due date]]></fieldDescription>
 	</field>
-	<field name="amount_total" class="java.lang.Double">
-		<fieldDescription><![CDATA[Total]]></fieldDescription>
+	<field name="partner_name" class="java.lang.String">
+		<fieldDescription><![CDATA[Partner Name]]></fieldDescription>
 	</field>
-	<field name="method" class="java.lang.String">
-		<fieldDescription><![CDATA[Computation Method]]></fieldDescription>
+	<field name="province" class="java.lang.String"/>
+	<field name="warranty" class="java.lang.Integer">
+		<fieldDescription><![CDATA[Warranty (Month)]]></fieldDescription>
 	</field>
-	<field name="rfq_supplier" class="java.lang.String"/>
-	<field name="rfq_amount_total" class="java.math.BigDecimal"/>
-	<field name="reason" class="java.lang.String"/>
-	<field name="create_date" class="java.util.Date"/>
+	<field name="note" class="java.lang.String">
+		<fieldDescription><![CDATA[Internal Notes]]></fieldDescription>
+	</field>
+	<field name="description" class="java.lang.String"/>
 	<variable name="count_column" class="java.lang.Integer" calculation="Count">
 		<variableExpression><![CDATA[$V{COLUMN_COUNT}]]></variableExpression>
 	</variable>

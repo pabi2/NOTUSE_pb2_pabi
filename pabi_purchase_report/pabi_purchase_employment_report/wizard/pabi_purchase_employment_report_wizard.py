@@ -2,9 +2,9 @@
 from openerp import models, fields, api
 
 
-class PabiPurchaseGreenProductReportWizard(models.TransientModel):
+class PabiPurchaseEmploymentWizard(models.TransientModel):
 
-    _name = 'pabi.purchase.green.product.report.wizard'
+    _name = 'pabi.purchase.employment.report.wizard'
 
     date_from = fields.Date(string='Start Date')
     date_to = fields.Date(string='End Date')
@@ -20,8 +20,8 @@ class PabiPurchaseGreenProductReportWizard(models.TransientModel):
     def run_report(self):
         data = {'parameters': {}}
         report_name = self.format == 'pdf' and \
-            'pabi_purchase_green_product_report' or \
-            'pabi_purchase_green_product_report_xls'
+            'pabi_purchase_employment_report' or \
+            'pabi_purchase_employment_report_xls'
         # For SQL, we search simply pass params
         data['parameters']['date_from'] = self.date_from
         data['parameters']['date_to'] = self.date_to

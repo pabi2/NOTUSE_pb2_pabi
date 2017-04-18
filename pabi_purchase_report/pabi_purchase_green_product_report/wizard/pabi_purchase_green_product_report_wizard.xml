@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <openerp>
     <data>
-        <record id="pabi_purchase_summarize_report_wizard" model="ir.ui.view">
-            <field name="name">PABI Purchase Summarize Report</field>
-            <field name="model">pabi.purchase.summarize.report.wizard</field>
+        <record id="pabi_purchase_green_product_report_wizard" model="ir.ui.view">
+            <field name="name">PABI Purchase Green Product Report</field>
+            <field name="model">pabi.purchase.green.product.report.wizard</field>
             <field name="type">form</field>
             <field name="arch" type="xml">
                 <form string="Selection Criteria">
@@ -25,17 +25,17 @@
             </field>
         </record>
 
-        <record id="action_pabi_purchase_summarize_report_wizard" model="ir.actions.act_window">
-            <field name="name">PABI Purchase Summarize Report</field>
-            <field name="res_model">pabi.purchase.summarize.report.wizard</field>
+        <record id="action_pabi_purchase_green_product_report_wizard" model="ir.actions.act_window">
+            <field name="name">PABI Purchase Green Product Report</field>
+            <field name="res_model">pabi.purchase.green.product.report.wizard</field>
             <field name="view_type">form</field>
             <field name="view_mode">tree,form</field>
-            <field name="view_id" ref="pabi_purchase_summarize_report_wizard"/>
+            <field name="view_id" ref="pabi_purchase_green_product_report_wizard"/>
             <field name="target">new</field>
-            <field name="help">Print PABI Purchase Summarize Report</field>
+            <field name="help">Print PABI Purchase Green Product Report</field>
         </record>
 
-        <menuitem id="menu_pabi_purchase_summarize_report_wizard" action="action_pabi_purchase_summarize_report_wizard" parent="pabi_purchase_report.menu_purchase_report" sequence="110"/>
+        <menuitem id="menu_pabi_purchase_green_product_report_wizard" action="action_pabi_purchase_green_product_report_wizard" parent="pabi_purchase_report.menu_purchase_report" sequence="110"/>
 
     </data>
 </openerp>

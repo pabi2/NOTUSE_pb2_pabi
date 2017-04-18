@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="pabi_stock_card_report" language="groovy" pageWidth="1094" pageHeight="595" orientation="Landscape" columnWidth="1054" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="pabi_stock_card_report" language="groovy" pageWidth="1094" pageHeight="595" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="1054" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
 	<property name="ireport.zoom" value="1.210000000000008"/>
-	<property name="ireport.x" value="577"/>
-	<property name="ireport.y" value="78"/>
+	<property name="ireport.x" value="211"/>
+	<property name="ireport.y" value="0"/>
 	<style name="THfont" isDefault="true" hAlign="Center" vAlign="Middle" lineSpacing="Single" isBlankWhenNull="true" fontSize="13" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="THSarabun.ttf" pdfEncoding="Identity-H" isPdfEmbedded="false"/>
 	<parameter name="operating_unit" class="java.lang.Integer"/>
 	<parameter name="product" class="java.lang.Integer"/>
@@ -49,9 +49,7 @@ ORDER BY stock_date]]>
 	<field name="uom" class="java.lang.String">
 		<fieldDescription><![CDATA[UoM]]></fieldDescription>
 	</field>
-	<field name="stock_date" class="java.sql.Timestamp">
-		<fieldDescription><![CDATA[Expiration Date]]></fieldDescription>
-	</field>
+	<field name="stock_date" class="java.sql.Timestamp"/>
 	<field name="grgislip" class="java.lang.String"/>
 	<field name="source_location" class="java.lang.Integer"/>
 	<field name="destination_location" class="java.lang.Integer"/>
