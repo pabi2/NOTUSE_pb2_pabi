@@ -180,9 +180,23 @@ class InterfaceAccountEntry(models.Model):
         self.residual = max(self.residual, 0.0)
 
     # ================== Main Execution Method ==================
+    @api.model
+    def _prepare_voucher_move_for_reversal(self, move):
+        for line in move.line_id:
+            # Similar to def voucher_cancel()
+            line.refresh()
+            if line.reconcile_id:
+                move_line_ids = [move_line.id for move_line in
+                                 line.reconcile_id.line_id]
+                move_line_ids.remove(line.id)
+                line.reconcile_id.unlink()
+                if len(move_line_ids) >= 2:
+                    move_lines = self.env['account.move.line'].\
+                        browse(move_line_ids)
+                    move_lines.reconcile_partial('auto')
+
     @api.multi
     def execute(self):
-        res = {}
         for interface in self:
             # Set type based on journal type
             if interface.to_reverse_entry_id:
@@ -194,6 +208,10 @@ class InterfaceAccountEntry(models.Model):
             # 1) Reverse
             if interface.type == 'reverse':
                 move = interface.to_reverse_entry_id.move_id
+                # If payment reversal, refresh it first
+                if interface.to_reverse_entry_id.type == 'voucher':
+                    self._prepare_voucher_move_for_reversal(move)
+                # Start reverse
                 rev_move = move.copy({'name': move.name + '_VOID',
                                       'ref': move.ref})
                 rev_move._switch_dr_cr()
@@ -202,16 +220,16 @@ class InterfaceAccountEntry(models.Model):
                 rev_move.button_validate()
                 interface.write({'move_id': rev_move.id,
                                  'state': 'done'})
-                res.update({interface.name: move.name})
+                interface.number = rev_move.name
             # 2) Invoice / Refund
             elif interface.type == 'invoice':
                 move = interface._action_invoice_entry()
-                res.update({interface.name: move.name})
+                interface.number = move.name
             # 3) Payment Receipt
             elif interface.type == 'voucher':
                 move = interface._action_payment_entry()
-                res.update({interface.name: move.name})
-        return res
+                interface.number = move.name
+        return True
 
     # ================== Sub Method by Action ==================
     @api.model
@@ -270,13 +288,24 @@ class InterfaceAccountEntry(models.Model):
         ctx = self._context.copy()
         ctx.update({'company_id': self.company_id.id})
         periods = Period.find(dt=move_date)
-        period_id = periods and periods[0].id or False
+        period = periods and periods[0] or False
+        period_id = period and period.id or False
         journal = self.journal_id
         ctx.update({
             'journal_id': journal.id,
             'period_id': period_id,
+            'fiscalyear_id': period and period.fiscalyear_id.id or False,
         })
+        move_name = "/"
+        if journal.sequence_id:
+            self = self.with_context(ctx)
+            sequence_id = journal.sequence_id.id
+            move_name = self.env['ir.sequence'].next_by_id(sequence_id)
+        else:
+            raise ValidationError(
+                _('Please define a sequence on the journal.'))
         move = AccountMove.create({
+            'name': move_name,
             'system_id': self.system_id.id,
             'ref': self.name,
             'operating_unit_id': operating_unit_id,
@@ -310,16 +339,16 @@ class InterfaceAccountEntry(models.Model):
             }
             move_line = AccountMoveLine.with_context(ctx).create(vals)
             line.ref_move_line_id = move_line
-            # For balance sheet item, do not need dimension
-            report_type = line.account_id.user_type.report_type
-            if report_type not in ('asset', 'liability'):
-                move_line.update_related_dimension(vals)
-                analytic_account = Analytic.create_matched_analytic(move_line)
-                if analytic_account and not journal.analytic_journal_id:
-                    raise ValidationError(
-                        _("You have to define an analytic journal on the "
-                          "'%s' journal!") % (journal.name,))
-                move_line.analytic_account_id = analytic_account
+            # For balance sheet item, do not need dimension (kittiu: ignore)
+            # report_type = line.account_id.user_type.report_type
+            # if report_type not in ('asset', 'liability'):
+            move_line.update_related_dimension(vals)
+            analytic_account = Analytic.create_matched_analytic(move_line)
+            if analytic_account and not journal.analytic_journal_id:
+                raise ValidationError(
+                    _("You have to define an analytic journal on the "
+                      "'%s' journal!") % (journal.name,))
+            move_line.analytic_account_id = analytic_account
 
             # For Normal Tax Line, also add to account_tax_detail
             if line.tax_id and not line.tax_id.is_wht and \
@@ -337,7 +366,8 @@ class InterfaceAccountEntry(models.Model):
                     self._get_doc_type(journal, line),
                     line.partner_id.id, line.tax_invoice_number, line.date,
                     sign * line.tax_base_amount,
-                    sign * (line.debit or line.credit)
+                    sign * (line.debit or line.credit),
+                    move_line_id=move_line.id,  # created by move line
                 )
                 tax_dict['tax_id'] = line.tax_id.id
                 tax_dict['taxbranch_id'] = line.taxbranch_id.id

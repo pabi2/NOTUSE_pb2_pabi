@@ -30,7 +30,9 @@ DOCTYPE_SELECT = [('incoming_shipment', 'Incoming Shipment'),
                   # For analytic line only (budget commitment)
                   ('purchase_request', 'Purchase Request'),
                   ('purchase_order', 'Purchase Order'),
-                  ('sale_order', 'Sales Order'), ]
+                  ('sale_order', 'Sales Order'),
+                  # Non document related, adjustment
+                  ('adjustment', 'Adjustment'), ]
 
 INVOICE_DOCTYPE = {'sale': 'out_invoice',
                    'sale_refund': 'out_refund',
@@ -69,6 +71,12 @@ class AccountMove(models.Model):
         compute='_compute_document',
         store=True,
         help="Use selection as refer_type in res_doctype",
+    )
+    date_value = fields.Date(
+        string='Value Date',
+        compute='_compute_document',
+        store=True,
+        help="If origin document have value date. Otherwise, use move date",
     )
     invoice_ids = fields.One2many(
         'account.invoice',
@@ -196,6 +204,12 @@ class AccountMove(models.Model):
                 else:
                     rec.document = document.number
                 rec.doctype = self._get_doctype(document._name, document)
+                if 'date_value' in document._fields:
+                    rec.date_value = document.date_value
+            else:
+                rec.doctype = 'adjustment'  # <-- Not related to any doc
+            if not rec.date_value:
+                rec.date_value = rec.date  # No Value Date, same as date
 
     @api.model
     def _get_doctype(self, model, document):
@@ -234,5 +248,13 @@ class AccountMoveLine(models.Model):
         string='Doctype',
         related='move_id.doctype',
         store=True,
+        readonly=True,
         help="Use selection as refer_type in res_doctype",
+    )
+    date_value = fields.Date(
+        string='Value Date',
+        related='move_id.date_value',
+        store=True,
+        readonly=True,
+        help="If origin document have value date. Otherwise, use move date",
     )

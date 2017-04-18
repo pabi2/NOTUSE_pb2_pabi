@@ -173,13 +173,29 @@ class AccountInvoice(models.Model):
             raise ValidationError(_('No Action'))
         action = action_id.read([])[0]
         action['domain'] =\
-            "[('id','in', ["+','.join(map(str, voucher_ids))+"])]"
+            "[('id','in', [" + ','.join(map(str, voucher_ids)) + "])]"
         ctx = ast.literal_eval(action['context'])
         ctx.update({
             'filter_by_invoice_ids': self.ids  # account_move_line.search()
         })
         action['context'] = ctx
         return action
+
+    @api.multi
+    def finalize_invoice_move_lines(self, move_lines):
+        move_lines = super(AccountInvoice,
+                           self).finalize_invoice_move_lines(move_lines)
+        new_move_lines = []
+        # Tax Accounts
+        vats = self.env['account.tax'].search([('is_wht', '=', False)])
+        tax_account_ids = vats.mapped('account_collected_id').ids
+        tax_account_ids += vats.mapped('account_paid_id').ids
+        for line_tuple in move_lines:
+            if line_tuple[2]['account_id'] in tax_account_ids:
+                line_tuple[2]['taxinvoice_taxbranch_id'] = \
+                    self.taxbranch_id.id
+            new_move_lines.append(line_tuple)
+        return new_move_lines
 
 
 class AccountInvoiceLine(models.Model):
@@ -202,25 +218,6 @@ class AccountInvoiceLine(models.Model):
             res['value'] = {}
         res['value'].update({'name': account.name})
         return res
-
-    @api.multi
-    @api.depends('account_id')
-    def _compute_require_chartfield(self):
-        """ Overwrite for case Invoice only, we care about account_id """
-        for rec in self:
-            if 'account_id' in rec and rec.account_id:
-                report_type = rec.account_id.user_type.report_type
-                rec.require_chartfield = report_type not in ('asset',
-                                                             'liability')
-            else:
-                rec.require_chartfield = True
-            if not rec.require_chartfield:
-                rec.section_id = False
-                rec.project_id = False
-                rec.personnel_costcenter_id = False
-                rec.invest_asset_id = False
-                rec.invest_construction_phase_id = False
-        return
 
 
 class AccountInvoiceTax(models.Model):

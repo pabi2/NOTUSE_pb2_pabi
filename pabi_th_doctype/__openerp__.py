@@ -10,13 +10,13 @@
 
 PABI2 Extension to l10n_th_doctype for,
 
+* Purchase Requisition
 * Work Acceptance
 * Approval Report
 * Stock Request
 * Stock Transfer
 * Stock Borrow
 * Payment Export
-* Bank Receipt
 * Interface Account
 
     """,
@@ -26,12 +26,14 @@ PABI2 Extension to l10n_th_doctype for,
     "application": False,
     "installable": True,
     "depends": [
-        'l10n_th_doctype',
+        'l10n_th_doctype_base',
+        'l10n_th_doctype_reversal',
         'pabi_purchase_work_acceptance',
         'stock_request',
         'pabi_procurement',
         'payment_export',
         'pabi_interface',
+        'purchase_requisition',
     ],
     "data": [
         "data/ir_sequence_data.xml",

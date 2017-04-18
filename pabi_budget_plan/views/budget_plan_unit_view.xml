@@ -61,15 +61,15 @@
             <field name="arch" type="xml">
                 <form string="Budget Plan">
                     <header>
-                        <button string="Submit" groups="pabi_budget_plan.group_budget_user" name="button_submit" states="draft" type="object" class="oe_highlight"/>
-                        <button string="Approve" groups="pabi_budget_plan.group_budget_manager" name="button_accept" states="submit" type="object" class="oe_highlight"/>
-                        <button string="Verify" groups="pabi_budget_plan.group_operating_unit_budget" name="button_approve" states="accept" type="object" class="oe_highlight"/>
-                        <button string="Accept" groups="pabi_budget_plan.group_cooperate_budget" name="button_accept_corp" states="approve" type="object" class="oe_highlight"/>
-                        <button string="Back to Approved" groups="pabi_budget_plan.group_cooperate_budget" name="button_back_approve" states="approve" type="object" class="oe_highlight"/>
-                        <button string="Back to Verified" groups="pabi_budget_plan.group_cooperate_budget" name="button_back_verify" states="accept_corp" type="object" class="oe_highlight"/>
-                        <button string="Reject" groups="pabi_budget_plan.group_budget_manager" name="button_reject" states="submit,accept" type="object" class="oe_highlight"/>
-                        <button string="Reset to Draft" groups="pabi_budget_plan.group_budget_manager" name="button_draft" states="cancel,reject" type="object"/>
-                        <button string="Cancel" groups="pabi_budget_plan.group_budget_user" name="button_cancel" states="draft" type="object"/>
+                        <button string="Submit" groups="pabi_base.group_budget_user" name="button_submit" states="draft" type="object" class="oe_highlight"/>
+                        <button string="Approve" groups="pabi_base.group_budget_manager" name="button_accept" states="submit" type="object" class="oe_highlight"/>
+                        <button string="Verify" groups="pabi_base.group_operating_unit_budget" name="button_approve" states="accept" type="object" class="oe_highlight"/>
+                        <button string="Accept" groups="pabi_base.group_cooperate_budget" name="button_accept_corp" states="approve" type="object" class="oe_highlight"/>
+                        <button string="Back to Approved" groups="pabi_base.group_cooperate_budget" name="button_back_approve" states="approve" type="object" class="oe_highlight"/>
+                        <button string="Back to Verified" groups="pabi_base.group_cooperate_budget" name="button_back_verify" states="accept_corp" type="object" class="oe_highlight"/>
+                        <button string="Reject" groups="pabi_base.group_budget_manager" name="button_reject" states="submit,accept" type="object" class="oe_highlight"/>
+                        <button string="Reset to Draft" groups="pabi_base.group_budget_manager" name="button_draft" states="cancel,reject" type="object"/>
+                        <button string="Cancel" groups="pabi_base.group_budget_user" name="button_cancel" states="draft" type="object"/>
                         <field name="state" widget="statusbar" statusbar_visible="draft,submit,accept,approve,accept_corp"/>
                     </header>
                     <sheet>
@@ -117,7 +117,7 @@
                             <page string="Revenue">
                                 <field name="plan_revenue_line_ids" colspan="4" nolabel="1" context="{'section_id': section_id, 'default_budget_method': 'revenue', 'tree_view_ref': 'pabi_budget_plan.view_budget_plan_unit_line_tree_inside'}"/>
                             </page>
-                            <page string="Job Order">
+                            <page string="Job Order" invisible="True">
                                 <field name="cost_control_ids" colspan="4" nolabel="1" attrs="{'readonly':[('state','not in',('draft', 'submit'))]}">
                                     <tree string="Job Order" editable="bottom">
                                         <field name="cost_control_id"/>
@@ -190,7 +190,8 @@
                     <field name="fund_id" required="1"/>
 
                     <field name="activity_group_id" domain="[('budget_method', '=', budget_method)]"/>
-                    <field name="activity_id" domain="[('activity_group_ids', 'in', [activity_group_id or 0]), ('budget_method', '=', budget_method)]"/>
+                    <field name="cost_control_id"/>
+                    <field name="activity_id" invisible="True" domain="[('activity_group_ids', 'in', [activity_group_id or 0]), ('budget_method', '=', budget_method)]"/>
 
                     <field name="unit"/>
                     <field name="activity_unit_price"/>

@@ -55,8 +55,7 @@ class BudgetPlanUnit(BudgetPlanCommon, models.Model):
         string='Revenue Plan Lines',
         copy=True,
         readonly=True,
-        domain=[('budget_method', '=', 'revenue'),
-                ('cost_control_id', '=', False)],  # Have domain
+        domain=[('budget_method', '=', 'revenue')],  # Have domain
         states={'draft': [('readonly', False)],
                 'submit': [('readonly', False)]},
         track_visibility='onchange',
@@ -67,8 +66,7 @@ class BudgetPlanUnit(BudgetPlanCommon, models.Model):
         string='Expense Plan Lines',
         copy=True,
         readonly=True,
-        domain=[('budget_method', '=', 'expense'),
-                ('cost_control_id', '=', False)],  # Have domain
+        domain=[('budget_method', '=', 'expense')],  # Have domain
         states={'draft': [('readonly', False)],
                 'submit': [('readonly', False)]},
         track_visibility='onchange',
@@ -114,6 +112,8 @@ class BudgetPlanUnit(BudgetPlanCommon, models.Model):
                  'cost_control_ids.detail_ids')
     def _compute_planned_overall(self):
         for rec in self:
+            rec.plan_expense_line_ids.onchange_mx()
+            rec.plan_revenue_line_ids.onchange_mx()
             amounts = \
                 rec.plan_summary_revenue_line_ids.mapped('planned_amount')
             rec.planned_revenue = sum(amounts)
@@ -154,6 +154,10 @@ class BudgetPlanUnit(BudgetPlanCommon, models.Model):
     def _onchange_section_id(self):
         self.org_id = self.section_id.org_id
         self.division_id = self.section_id.division_id
+        for line in self.plan_expense_line_ids:
+            line.section_id = self.section_id
+        for line in self.plan_revenue_line_ids:
+            line.section_id = self.section_id
 
     # Call inherited methods
     @api.multi
@@ -190,7 +194,7 @@ class BudgetPlanUnit(BudgetPlanCommon, models.Model):
         user = self.env.user
         employee = user.partner_id.employee_id
         for rec in self:
-            if user.has_group('pabi_budget_plan.group_budget_manager') and \
+            if user.has_group('pabi_base.group_budget_manager') and \
                     employee.section_id.division_id == rec.division_id:
                 continue
             elif user.id == SUPERUSER_ID:
@@ -273,6 +277,17 @@ class BudgetPlanUnitLine(ActivityCommon, models.Model):
         string="Total Budget",
         compute="_compute_total_budget",
     )
+
+    @api.multi
+    @api.onchange('m1', 'm2', 'm3', 'm4', 'm5', 'm6',
+                  'm7', 'm8', 'm9', 'm10', 'm11', 'm12',)
+    def onchange_mx(self):
+        for rec in self:
+            planned_amount = sum([rec.m1, rec.m2, rec.m3, rec.m4,
+                                  rec.m5, rec.m6, rec.m7, rec.m8,
+                                  rec.m9, rec.m10, rec.m11, rec.m12
+                                  ])
+            rec.planned_amount = planned_amount
 
     @api.depends('unit',
                  'activity_unit',

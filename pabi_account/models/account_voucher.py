@@ -209,7 +209,7 @@ class AccountVoucher(models.Model):
         if action_id:
             action = action_id.read([])[0]
             action['domain'] =\
-                "[('id','in', ["+','.join(map(str, invoice_ids))+"])]"
+                "[('id','in', [" + ','.join(map(str, invoice_ids)) + "])]"
             return action
         return True
 
@@ -273,4 +273,10 @@ class AccountVoucherTax(models.Model):
                     r.update({'taxbranch_id': wht_taxbranch_id})
                 else:
                     r.update({'taxbranch_id': taxbranch_id})
+        return res
+
+    @api.model
+    def _prepare_one_move_line(self, t):
+        res = super(AccountVoucherTax, self)._prepare_one_move_line(t)
+        res['taxinvoice_taxbranch_id'] = t['taxbranch_id']
         return res

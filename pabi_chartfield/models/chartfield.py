@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from openerp import api, models, fields, _
 from openerp.addons.pabi_base.models.res_common import ResCommon
+
 from openerp.exceptions import ValidationError
 
 # org -> sector -> subsector -> division -> *section* -> costcenter
@@ -128,7 +129,7 @@ CHART_SELECT = [
     'invest_asset_id',
     'invest_construction_phase_id',
     'cost_control_id',  # Non-Binding
-    ]
+]
 
 # All types of budget structure
 # This is related to chart structure
@@ -139,7 +140,7 @@ CHART_VIEW = {
     'invest_asset': ('Investment Asset', 'invest_asset_id'),
     'invest_construction': ('Investment Construction',
                             'invest_construction_id'),
-    }
+}
 
 CHART_VIEW_LIST = [(x[0], x[1][0]) for x in CHART_VIEW.items()]
 CHART_VIEW_FIELD = dict([(x[0], x[1][1]) for x in CHART_VIEW.items()])
@@ -208,7 +209,7 @@ CHART_FIELDS = [
                  'invest_asset',
                  'invest_construction',
                  ]),
-    ]
+]
 
 
 # Extra non-binding chartfield (similar to activity)
@@ -223,7 +224,19 @@ class CostControlType(ResCommon, models.Model):
 
 class CostControl(ResCommon, models.Model):
     _name = 'cost.control'
+    _inherit = ['mail.thread']
     _description = 'Job Order'
+
+    @api.model
+    def _get_owner_level_selection(self):
+        selection = [
+            ('org', 'Org'),
+            ('sector', 'Sector'),
+            ('subsector', 'Subsector'),
+            ('division', 'Division'),
+            ('section', 'Section'),
+        ]
+        return selection
 
     description = fields.Text(
         string='Description',
@@ -232,7 +245,92 @@ class CostControl(ResCommon, models.Model):
         'cost.control.type',
         string='Job Order Type',
         required=True,
+        track_visibility='onchange',
     )
+    public = fields.Boolean(
+        string="NSTDA Wide",
+        copy=False,
+        default=True,
+        track_visibility='onchange',
+    )
+    owner_level = fields.Selection(
+        string="Owner Level",
+        selection=_get_owner_level_selection,
+        copy=False,
+        track_visibility='onchange',
+    )
+    # Unit Base
+    org_id = fields.Many2one(
+        'res.org',
+        string='Org',
+        track_visibility='onchange',
+    )
+    sector_id = fields.Many2one(
+        'res.sector',
+        string='Sector',
+        track_visibility='onchange',
+    )
+    subsector_id = fields.Many2one(
+        'res.subsector',
+        string='Subsector',
+        track_visibility='onchange',
+    )
+    division_id = fields.Many2one(
+        'res.division',
+        string='Division',
+        track_visibility='onchange',
+    )
+    section_id = fields.Many2one(
+        'res.section',
+        string='Section',
+        track_visibility='onchange',
+    )
+    active = fields.Boolean(
+        track_visibility='onchange',
+    )
+
+    _sql_constraints = [
+        ('name_uniq', 'unique(name)', 'Job Order Name must be unique!'),
+    ]
+
+    @api.model
+    def _check_access(self):
+        if not self.env.user.has_group(
+                'pabi_base.group_cooperate_budget')\
+            and not self.env.user.has_group(
+                'pabi_base.group_operating_unit_budget'):
+            raise ValidationError(
+                _('Sorry! \n You are not authorized to edit this field.'))
+        return True
+
+    @api.model
+    def create(self, vals):
+        if 'public' in vals:
+            self._check_access()
+        return super(CostControl, self).create(vals)
+
+    @api.multi
+    def write(self, vals):
+        if 'public' in vals:
+            self._check_access()
+        return super(CostControl, self).write(vals)
+
+    @api.onchange('public')
+    def _onchange_public(self):
+        self.owner_level = False
+        self.org_id = False
+        self.sector_id = False
+        self.subsector_id = False
+        self.division_id = False
+        self.section_id = False
+
+    @api.onchange('owner_level')
+    def _onchange_owner_level(self):
+        self.org_id = False
+        self.sector_id = False
+        self.subsector_id = False
+        self.division_id = False
+        self.section_id = False
 
     # @api.multi
     # def name_get(self):
@@ -266,6 +364,8 @@ class HeaderTaxBranch(object):
     def _set_taxbranch_ids(self, lines):
         taxbranch_ids = list(set([x.taxbranch_id.id
                                   for x in lines if x.taxbranch_id]))
+        if not taxbranch_ids:  # If not tax branch at all, allow manual select
+            taxbranch_ids = self.env['res.taxbranch'].search([]).ids
         self.taxbranch_ids = taxbranch_ids
         self.len_taxbranch = len(taxbranch_ids)
 
@@ -437,6 +537,11 @@ class ChartField(object):
         required=False,
         copy=True,
     )
+
+    # Required fields (to ensure no error onchange)
+    activity_id = fields.Many2one('account.activity')
+    product_id = fields.Many2one('product.product')
+    account_id = fields.Many2one('account.account')
 
     @api.model
     def _get_fund_domain(self):
@@ -625,12 +730,16 @@ class ChartFieldAction(ChartField):
                             _('More than 1 dimension selected'))
 
     @api.multi
-    @api.depends('activity_id', 'product_id')
+    @api.depends('activity_id', 'account_id')
     def _compute_require_chartfield(self):
         for rec in self:
-            if 'activity_id' in rec and rec.activity_group_id:
-                report_type = rec.activity_id.\
-                    account_id.user_type.report_type
+            account = False
+            if 'account_id' in rec and rec.account_id:
+                account = rec.account_id
+            elif 'activity_id' in rec and rec.activity_id:
+                account = rec.activity_id.account_id
+            if account:
+                report_type = account.user_type.report_type
                 rec.require_chartfield = report_type not in ('asset',
                                                              'liability')
             else:
@@ -645,6 +754,15 @@ class ChartFieldAction(ChartField):
 
     @api.multi
     def write(self, vals):
+        # For balance sheet account, alwasy set no dimension
+        if vals.get('account_id', False):
+            account = self.env['account.account'].browse(vals['account_id'])
+            if account.user_type.report_type in ('asset', 'liability'):
+                vals['section_id'] = False
+                vals['project_id'] = False
+                vals['personnel_costcenter_id'] = False
+                vals['invest_asset_id'] = False
+                vals['invest_construction_phase_id'] = False
         res = super(ChartFieldAction, self).write(vals)
         if not self._context.get('MyModelLoopBreaker', False):
             self.update_related_dimension(vals)
