@@ -51,6 +51,10 @@
         'pabi_purchase_employment_report_wizard.xml',
         'pabi_yearly_purchase/report_data.xml',
         'pabi_yearly_purchase/wizard/pabi_yearly_purchase_report_wizard.xml',
+        'pabi_purchase_request_track_report/report_data.xml',
+        'pabi_purchase_request_track_report/security/ir.model.access.csv',
+        'pabi_purchase_request_track_report/wizard/'
+        'pabi_purchase_request_track_report_wizard.xml',
     ],
     'demo': [
     ],
