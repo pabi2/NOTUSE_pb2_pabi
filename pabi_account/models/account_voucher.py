@@ -216,6 +216,9 @@ class AccountVoucher(models.Model):
     @api.multi
     def proforma_voucher(self):
         result = super(AccountVoucher, self).proforma_voucher()
+        if self.writeoff_amount > 0.0:
+            raise ValidationError(
+                _('Difference Amount must be 0.0 to validate this document!'))
         for voucher in self:
             voucher.write({'validate_user_id': self.env.user.id,
                            'validate_date': fields.Date.today()})
