@@ -11,6 +11,42 @@ class PurchaseBilling(models.Model):
     _name = "purchase.billing"
     _inherit = ['mail.thread']
 
+    def _get_default_billing_date(self):
+        today = fields.Date.context_today(self)
+        res = datetime.datetime.strptime(
+            fields.Date.context_today(self), '%Y-%m-%d'
+        ).date()
+        date_list = []
+        THHoliday = self.env['thai.holiday']
+        date_due_setting = self.env.user.company_id.date_due_day
+        regex = r"\d{1,2}"
+        matches = re.findall(regex, date_due_setting)
+        for match in matches:
+            check_day = datetime.datetime.strptime(
+                fields.Date.context_today(self), '%Y-%m-%d').date()
+            check = check_day.replace(day=int(match))
+            check = datetime.datetime.strftime(check, "%Y-%m-%d")
+            check_string = THHoliday.find_previous_working_day(check)
+            final_check_day = datetime.datetime.\
+                strptime(check_string, '%Y-%m-%d').date().day
+            if 0 < int(final_check_day) < 29 and int(final_check_day) \
+                    not in date_list:
+                date_list.append(int(final_check_day))
+            else:
+                raise UserError(
+                    _("""Wrong due date configuration.
+                         Please check the due date setting.""")
+                )
+        conf_date_list = sorted(date_list, key=int)
+        for conf_day in conf_date_list:
+            if res.day < conf_day:
+                res = res.replace(day=int(conf_day))
+        return res
+
+
+
+
+
     name = fields.Char(
         string='Billing Number',
         readonly=True,
@@ -45,7 +81,8 @@ class PurchaseBilling(models.Model):
     date = fields.Date(
         string='Billing Date',
         copy=False,
-        default=lambda self: fields.Date.context_today(self),
+        # default=lambda self: fields.Date.context_today(self),
+        default=lambda self: self._get_default_billing_date(),
         readonly=True,
         states={'draft': [('readonly', False)]},
     )
