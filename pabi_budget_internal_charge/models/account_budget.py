@@ -60,12 +60,18 @@ class AccountBudget(models.Model):
             rec.budgeted_expense_external = expense_external
             rec.budgeted_expense_internal = expense_internal
 
-    @api.model
-    def _check_amount_with_policy(self):
-        if self.budgeted_expense_external != self.policy_amount:
-            raise UserError(
-                _('New External Budgeted Expense must equal to Policy Amount'))
-        return True
+    @api.multi
+    def _get_future_plan_amount(self):
+        """ Overwrite """
+        self.ensure_one()
+        Period = self.env['account.period']
+        period_num = Period.get_num_period_by_period()  # Now
+        future_plan = 0.0
+        for line in self.budget_expense_line_ids.\
+                filtered(lambda l: l.charge_type == 'external'):  # Add this
+            for i in range(period_num, 13):
+                future_plan += line['m%s' % (i,)]
+        return future_plan
 
 
 class AccountBudgetLine(models.Model):

@@ -117,6 +117,13 @@ class AccountBudget(ChartField, models.Model):
         track_visibility='onchange',
     )
 
+    @api.model
+    def _get_budget_level_type_hook(self, budget):
+        if 'chart_view' in budget and budget.chart_view:
+            return budget.chart_view
+        return super(AccountBudgetLine, self).\
+            _get_budget_level_type_hook(budget)
+
     @api.multi
     def budget_validate(self):
         for budget in self:
@@ -198,6 +205,20 @@ class AccountBudget(ChartField, models.Model):
             res['arch'] = etree.tostring(doc)
         return res
 
+    @api.multi
+    def _get_past_actual_domain(self):
+        self.ensure_one()
+        dom = super(AccountBudget, self)._get_past_actual_domain()
+        budget_type_dict = {
+            'unit_base': 'section_id',
+            'project_base': 'project_id',
+            'personnel': 'personnel_costcenter_id',
+            'invest_asset': 'investment_asset_id',
+            'invest_construction': 'invest_construction_phase_id'}
+        dimension = budget_type_dict[self.chart_view]
+        dom.append((dimension, '=', self[dimension].id))
+        return dom
+
 
 class AccountBudgetLine(ChartField, models.Model):
     _inherit = 'account.budget.line'
@@ -222,6 +243,13 @@ class AccountBudgetLine(ChartField, models.Model):
         'budget.unit.job.order.line',
         string='Breakdown Job Order Line ref.',
     )
+
+    @api.model
+    def _get_budget_level_type_hook(self, budget_line):
+        if 'chart_view' in budget_line and budget_line.chart_view:
+            return budget_line.chart_view
+        return super(AccountBudgetLine, self).\
+            _get_budget_level_type_hook(budget_line)
 
     @api.multi
     @api.depends()

@@ -2,6 +2,8 @@
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from openerp import models, api, fields, _
+from openerp import tools
+from openerp.tools import float_compare
 from openerp.exceptions import Warning as UserError, ValidationError
 from openerp.addons.pabi_base.models.res_investment_structure \
     import CONSTRUCTION_PHASE
@@ -20,6 +22,7 @@ class ResInvestConstruction(LogCommon, models.Model):
     state = fields.Selection(
         [('draft', 'Draft'),
          ('submit', 'Submitted'),
+         ('unapprove', 'Un-Approved'),
          ('approve', 'Approved'),
          ('reject', 'Rejected'),
          ('delete', 'Deleted'),
@@ -36,21 +39,25 @@ class ResInvestConstruction(LogCommon, models.Model):
         string='Duration (months)',
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
+        copy=False,
     )
     date_start = fields.Date(
         string='Start Date',
-        required=True,
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
+        copy=False,
     )
     date_end = fields.Date(
         string='End Date',
-        required=False,
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
+        copy=False,
     )
     pm_employee_id = fields.Many2one(
         'hr.employee',
@@ -60,7 +67,7 @@ class ResInvestConstruction(LogCommon, models.Model):
         states={'draft': [('readonly', False)],
                 'submit': [('readonly', False)]},
     )
-    section_id = fields.Many2one(
+    pm_section_id = fields.Many2one(
         'res.section',
         string='Project Manager Section',
         required=True,
@@ -70,10 +77,13 @@ class ResInvestConstruction(LogCommon, models.Model):
     )
     org_id = fields.Many2one(
         'res.org',
-        string='Project Manager Org',
-        related='section_id.org_id',
-        store=True,
+        string='Org',
+        required=True,
         readonly=True,
+        states={'draft': [('readonly', False)],
+                'submit': [('readonly', False)]},
+        help="Org where this construction project belong to. "
+        "Use default as PM's org, but changable."
     )
     mission_id = fields.Many2one(
         'res.mission',
@@ -92,7 +102,8 @@ class ResInvestConstruction(LogCommon, models.Model):
         string='Approved Budget',
         default=0.0,
         readonly=True,
-        states={'submit': [('readonly', False)]},
+        states={'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
         write=['pabi_base.group_cooperate_budget'],  # Only Corp can edit
     )
     amount_phase_approve = fields.Float(
@@ -132,11 +143,29 @@ class ResInvestConstruction(LogCommon, models.Model):
     ]
 
     @api.multi
+    @api.constrains('budget_plan_ids')
+    def _check_fiscalyear_unique(self):
+        for rec in self:
+            fiscalyear_ids = [x.fiscalyear_id.id for x in rec.budget_plan_ids]
+            for x in fiscalyear_ids:
+                if fiscalyear_ids.count(x) > 1:
+                    raise ValidationError(_('Duplicate fiscalyear plan'))
+
+    @api.model
+    def _check_cooperate_access(self):
+        if not self.env.user.has_group('pabi_base.group_cooperate_budget'):
+            raise UserError(
+                _('Only Cooperate Budget user is allowed!'))
+        return True
+
+    @api.multi
     @api.depends('phase_ids.amount_phase_approve')
     def _compute_amount_phase_approve(self):
         for rec in self:
             amount_total = sum([x.amount_phase_approve for x in rec.phase_ids])
-            if amount_total and amount_total != rec.amount_budget_approve:
+            if amount_total and float_compare(amount_total,
+                                              rec.amount_budget_approve,
+                                              precision_digits=2) != 0:
                 raise ValidationError(
                     _('Phases Approved Amount != Project Approved Amount'))
             rec.amount_phase_approve = amount_total
@@ -175,7 +204,8 @@ class ResInvestConstruction(LogCommon, models.Model):
     @api.onchange('pm_employee_id')
     def _onchange_user_id(self):
         employee = self.pm_employee_id
-        self.section_id = employee.section_id
+        self.pm_section_id = employee.section_id
+        self.org_id = employee.org_id
 
     @api.onchange('month_duration', 'date_start', 'date_end')
     def _onchange_date(self):
@@ -214,7 +244,6 @@ class ResInvestConstruction(LogCommon, models.Model):
     @api.multi
     def action_create_phase(self):
         for rec in self:
-            print rec.phase_ids
             if rec.phase_ids:
                 continue
             phases = []
@@ -231,8 +260,17 @@ class ResInvestConstruction(LogCommon, models.Model):
 
     @api.multi
     def action_approve(self):
+        self._check_cooperate_access()
         self.action_create_phase()
         self.write({'state': 'approve'})
+
+    @api.multi
+    def action_unapprove(self):
+        # Unapprove all phases, only those in Approved state
+        for rec in self:
+            rec.phase_ids.filtered(
+                lambda l: l.state == 'approve').action_unapprove()
+        self.write({'state': 'unapprove'})
 
     @api.multi
     def action_reject(self):
@@ -281,6 +319,7 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
     state = fields.Selection(
         [('draft', 'Draft'),
          ('submit', 'Submitted'),
+         ('unapprove', 'Un-Approved'),
          ('approve', 'Approved'),
          ('reject', 'Rejected'),
          ('delete', 'Deleted'),
@@ -298,7 +337,8 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         default=0.0,
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
     )
     amount_phase_plan = fields.Float(
         string='Planned Budget (Phase)',
@@ -314,19 +354,22 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         string='Duration (months)',
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
     )
     date_start = fields.Date(
         string='Start Date',
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
     )
     date_end = fields.Date(
         string='End Date',
         readonly=True,
         states={'draft': [('readonly', False)],
-                'submit': [('readonly', False)]},
+                'submit': [('readonly', False)],
+                'unapprove': [('readonly', False)]},
     )
     date_expansion = fields.Date(
         string='Date Expansion',
@@ -359,15 +402,23 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
     )
     fiscalyear_ids = fields.Many2many(
         'account.fiscalyear',
+        'construction_phase_fiscalyear_rel', 'phase_id', 'fiscalyear_id',
         string='Related Fiscal Years',
         compute='_compute_fiscalyear_ids',
+        store=True,
         help="All related fiscal years for this phases"
+    )
+    budget_count = fields.Integer(
+        string='Budget Control Count',
+        compute='_compute_budget_count',
+    )
+    budget_to_sync_count = fields.Integer(
+        string='Budget Need Sync Count',
+        compute='_compute_budget_to_sync_count',
     )
     to_sync = fields.Boolean(
         string='To Sync',
-        compute='_compute_to_sync',
-        store=True,
-        help="Some changes left to be synced"
+        compute='_compute_budget_to_sync_count',
     )
     sync_ids = fields.One2many(
         'res.invest.construction.phase.sync',
@@ -375,10 +426,26 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         string='Sync History',
         copy=False,
     )
+    summary_ids = fields.One2many(
+        'invest.construction.phase.summary',
+        'phase_id',
+        string='Phase Summary',
+        readonly=True,
+    )
     _sql_constraints = [
         ('number_uniq', 'unique(code)',
          'Constuction Phase Code must be unique!'),
     ]
+
+    @api.multi
+    @api.constrains('phase_plan_ids')
+    def _check_fiscalyear_unique(self):
+        for rec in self:
+            period_ids = [x.calendar_period_id.id for x in rec.phase_plan_ids]
+            for x in period_ids:
+                if period_ids.count(x) > 1:
+                    raise ValidationError(
+                        _('Duplicate period in budget plan!'))
 
     @api.multi
     @api.constrains('date_expansion', 'date_start', 'date_end')
@@ -443,6 +510,35 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
     def _compute_active(self):
         for rec in self:
             rec.active = rec.state == 'approve'
+
+    @api.model
+    def find_active_construction_budget(self, fiscalyear_ids, org_ids):
+        budgets = self.env['account.budget'].search([
+            ('chart_view', '=', 'invest_construction'),
+            ('latest_version', '=', True),
+            ('fiscalyear_id', 'in', fiscalyear_ids),
+            ('org_id', 'in', org_ids)])
+        return budgets
+
+    @api.multi
+    @api.depends()
+    def _compute_budget_count(self):
+        for rec in self:
+            # Show all budget control with the same org and same fiscalyear
+            budgets = self.find_active_construction_budget(
+                rec.fiscalyear_ids.ids, [rec.org_id.id])
+            rec.budget_count = len(budgets)
+
+    @api.multi
+    @api.depends('sync_ids')
+    def _compute_budget_to_sync_count(self):
+        for rec in self:
+            to_sync_fiscals = rec.sync_ids.filtered(
+                lambda l: not l.synced).mapped('fiscalyear_id')
+            budgets = self.find_active_construction_budget(
+                to_sync_fiscals.ids, [rec.org_id.id])
+            rec.budget_to_sync_count = len(budgets)
+            rec.to_sync = len(budgets) > 0 and True or False
 
     @api.multi
     @api.depends('phase_plan_ids.amount_plan')
@@ -514,22 +610,13 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
                               for x in phase.phase_plan_ids]
             phase.fiscalyear_ids = list(set(fiscalyear_ids))
 
-    @api.multi
-    @api.depends('sync_ids.synced')
-    def _compute_to_sync(self):
-        for phase in self:
-            fiscalyear_ids = [x.fiscalyear_id.id
-                              for x in phase.phase_plan_ids]
-            phase.fiscalyear_ids = list(set(fiscalyear_ids))
-            to_syncs = phase.sync_ids.filtered(lambda l: l.synced is False)
-            phase.to_sync = len(to_syncs) > 0 and True or False
-
     @api.model
-    def _prepare_mo_dict(self, fiscalyear):
+    def _prepare_mo_dict(self, fiscalyear, prefix):
+        """ {1: 'm10', ..., 12: 'm9'}, {'m1': False, ..., 'm12': False} """
         month = int(fiscalyear.date_start[5:7])
         mo_dict = {}
         for i in range(12):
-            mo_dict.update({month: 'm' + str(i + 1)})
+            mo_dict.update({month: prefix + str(i + 1)})
             month += 1
             if month > 12:
                 month = 1
@@ -543,24 +630,20 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         only sync if synced=False
         """
         for phase in self:
-            print fiscalyear_ids
-            print phase.sync_ids
             # Find phase with vaild sync history (has been pulled before)
             phase_syncs = not fiscalyear_ids and phase.sync_ids or \
                 phase.sync_ids.filtered(lambda l: l.fiscalyear_id.id
                                         in fiscalyear_ids)
-            print phase_syncs
             if not phase_syncs:
                 continue
             for sync in phase_syncs:
-                print sync
                 # No valid budate line reference, or already synced, ignore it
                 # (need to pull from budget control first)
                 if not sync.sync_budget_line_id or sync.synced:
                     continue
                 # Prepare update dict
                 fiscalyear = sync.fiscalyear_id
-                mo_dict, vals = self._prepare_mo_dict(fiscalyear)
+                mo_dict, vals = self._prepare_mo_dict(fiscalyear, 'm')
                 # Update it
                 for plan in phase.phase_plan_ids.filtered(
                         lambda l: l.fiscalyear_id.id == fiscalyear.id):
@@ -577,6 +660,65 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
     def action_sync_phase_to_budget_line(self):
         return self.sync_phase_to_budget_line(fiscalyear_ids=False)  # do all
 
+    @api.multi
+    def _set_amount_plan_init(self):
+        for phase in self:
+            for plan in phase.phase_plan_ids:
+                if not plan.amount_plan_init:
+                    plan.amount_plan_init = plan.amount_plan
+
+    @api.multi
+    def _check_amount_plan_approve(self):
+        for phase in self:
+            if float_compare(phase.amount_phase_plan,
+                             phase.amount_phase_approve,
+                             precision_digits=2) != 0:
+                raise UserError(
+                    _('Planned amount not equal to approved amount!'))
+
+    @api.multi
+    def _create_phase_sync(self):
+        # Create phase sync of all fiscalyear_ids (if not exists)
+        for phase in self:
+            syncs = []
+            exist_fiscal_ids = [x.fiscalyear_id.id for x in phase.sync_ids]
+            for fiscalyear in phase.fiscalyear_ids:
+                # Not already exists, create it.
+                if fiscalyear.id not in exist_fiscal_ids:
+                    sync = {'fiscalyear_id': fiscalyear.id,
+                            'last_sync': False,
+                            'synced': False, }
+                    syncs.append((0, 0, sync))
+            phase.write({'sync_ids': syncs})
+
+    @api.multi
+    def action_open_budget_control(self):
+        self.ensure_one()
+        self.env['res.invest.construction']._check_cooperate_access()
+        action = self.env.ref('pabi_chartfield.'
+                              'act_account_budget_view_invest_construction')
+        result = action.read()[0]
+        budgets = self.find_active_construction_budget(self.fiscalyear_ids.ids,
+                                                       [self.org_id.id])
+        dom = [('id', 'in', budgets.ids)]
+        result.update({'domain': dom})
+        return result
+
+    @api.multi
+    def action_open_to_sync_budget_control(self):
+        self.ensure_one()
+        self.env['res.invest.construction']._check_cooperate_access()
+        action = self.env.ref('pabi_chartfield.'
+                              'act_account_budget_view_invest_construction')
+        result = action.read()[0]
+        to_sync_fiscals = self.sync_ids.filtered(
+            lambda l: not l.synced).mapped('fiscalyear_id')
+        budgets = self.find_active_construction_budget(to_sync_fiscals.ids,
+                                                       [self.org_id.id])
+        dom = [('id', 'in', budgets.ids)]
+        result.update({'domain': dom})
+        return result
+
     # Statuses
     @api.multi
     def action_submit(self):
@@ -584,7 +726,15 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
 
     @api.multi
     def action_approve(self):
+        self.env['res.invest.construction']._check_cooperate_access()
+        self._check_amount_plan_approve()
+        self._set_amount_plan_init()
+        self._create_phase_sync()
         self.write({'state': 'approve'})
+
+    @api.multi
+    def action_unapprove(self):
+        self.write({'state': 'unapprove'})
 
     @api.multi
     def action_reject(self):
@@ -605,6 +755,19 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
     @api.multi
     def action_draft(self):
         self.write({'state': 'draft'})
+
+    @api.multi
+    @api.constrains('sync_ids', 'state')
+    def _trigger_auto_sync(self):
+        for phase in self:
+            to_sync_fiscals = phase.sync_ids.filtered(
+                lambda l: not l.synced).mapped('fiscalyear_id')
+            budgets = self.find_active_construction_budget(to_sync_fiscals.ids,
+                                                           [phase.org_id.id])
+            for budget in budgets:
+                if budget.construction_auto_sync:
+                    budget.with_context(
+                        phase=phase.id).sync_budget_invest_construction()
 
 
 class ResInvestConstructionBudgetPlan(models.Model):
@@ -627,11 +790,11 @@ class ResInvestConstructionBudgetPlan(models.Model):
         string='Amount',
         required=True,
     )
-    _sql_constraints = [
-        ('construction_plan_uniq',
-         'unique(invest_construction_id, fiscalyear_id)',
-         'Fiscal year must be unique for a construction project!'),
-    ]
+    # _sql_constraints = [
+    #     ('construction_plan_uniq',
+    #      'unique(invest_construction_id, fiscalyear_id)',
+    #      'Fiscal year must be unique for a construction project!'),
+    # ]
 
 
 class ResInvestConstructionPhasePlan(models.Model):
@@ -639,11 +802,32 @@ class ResInvestConstructionPhasePlan(models.Model):
     _description = 'Investment Construction Phase Plan'
     _order = 'calendar_period_id'
 
+    id = fields.Integer(
+        string='ID',
+    )
     calendar_period_id = fields.Many2one(
         'account.period.calendar',
         string='Calendar Period',
         required=True,
     )
+    period_state = fields.Selection(
+        [('draft', 'Draft'),
+         ('done', 'Done'), ],
+        string='Period Status',
+        related='calendar_period_id.state',
+    )
+    # past_period_le = fields.Boolean(
+    #     string='Readonly',
+    #     compute='_compute_past_period',
+    #     help="These peirods are less or equal to Today.\n"
+    #     "Used for making amount readonly",
+    # )
+    # past_period_lt = fields.Boolean(
+    #     string='Readonly',
+    #     compute='_compute_past_period',
+    #     help="These peirods are less then Today.\n"
+    #     "Used for calculate rolling amount.",
+    # )
     fiscalyear_id = fields.Many2one(
         'account.fiscalyear',
         related='calendar_period_id.fiscalyear_id',
@@ -663,15 +847,29 @@ class ResInvestConstructionPhasePlan(models.Model):
         related='invest_construction_phase_id.invest_construction_id',
         store=True,
     )
+    amount_plan_init = fields.Float(
+        string='Initial Plan',
+        readonly=True,
+    )
     amount_plan = fields.Float(
-        string='Amount',
+        string='Current Plan',
         required=True,
     )
-    _sql_constraints = [
-        ('construction_phase_plan_uniq',
-         'unique(invest_construction_phase_id, calendar_period_id)',
-         'Period must be unique for a construction phase!'),
-    ]
+    # _sql_constraints = [
+    #     ('construction_phase_plan_uniq',
+    #      'unique(invest_construction_phase_id, calendar_period_id)',
+    #      'Period must be unique for a construction phase!'),
+    # ]
+
+    # @api.multi
+    # @api.depends()
+    # def _compute_past_period(self):
+    #     for rec in self:
+    #         today = fields.Date.context_today(self)
+    #         rec.past_period_le = \
+    #             rec.calendar_period_id.date_start <= today or False
+    #         rec.past_period_lt = \
+    #             rec.calendar_period_id.date_stop < today or False
 
     @api.multi
     @api.constrains('calendar_period_id')
@@ -685,6 +883,16 @@ class ResInvestConstructionPhasePlan(models.Model):
                     rec.calendar_period_id.date_start > date_end:
                 raise ValidationError(
                     _('Period must be within start and date!'))
+
+    @api.multi
+    def write(self, vals):
+        if 'amount_plan' in vals:
+            for rec in self:
+                today = fields.Date.context_today(self)
+                if rec.calendar_period_id.date_start < today:
+                    raise UserError(_('You are not allowed to change '
+                                      'amount in the past period!'))
+        return super(ResInvestConstructionPhasePlan, self).write(vals)
 
 
 class ResInvestConstructionPhaseSync(models.Model):
@@ -709,11 +917,13 @@ class ResInvestConstructionPhaseSync(models.Model):
         string='Budget Line Ref',
         index=True,
         ondelete='set null',
+        help="This is of latest version of fiscalyear's budget control",
     )
     budget_id = fields.Many2one(
         'account.budget',
         related='sync_budget_line_id.budget_id',
         string='Budget Control',
+        store=True,
         readonly=True,
     )
     last_sync = fields.Datetime(
@@ -726,3 +936,39 @@ class ResInvestConstructionPhaseSync(models.Model):
         help="Checked when it is synced. Unchecked when phase is updated"
         "then it will be synced again",
     )
+
+
+class InvestConstructionPhaseSummary(models.Model):
+    _name = 'invest.construction.phase.summary'
+    _auto = False
+    _rec_name = 'fiscalyear_id'
+    _description = 'Fiscal Year summary of each phase amount'
+
+    phase_id = fields.Many2one(
+        'res.invest.construction.phase',
+        string='Construction Phase',
+        readonly=True,
+    )
+    fiscalyear_id = fields.Many2one(
+        'account.fiscalyear',
+        string='fiscalyear',
+        readonly=True,
+    )
+    amount_plan = fields.Float(
+        string='Plan',
+        readonly=True,
+    )
+
+    def init(self, cr):
+
+        _sql = """
+            select min(id) as id, invest_construction_phase_id as phase_id,
+                    fiscalyear_id, sum(amount_plan) as amount_plan
+            from res_invest_construction_phase_plan
+            group by invest_construction_phase_id, fiscalyear_id
+        """
+
+        tools.drop_view_if_exists(cr, self._table)
+        cr.execute(
+            """CREATE or REPLACE VIEW %s as (%s)""" %
+            (self._table, _sql,))
